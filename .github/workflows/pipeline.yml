@@ -70,7 +70,14 @@ jobs:
       - name: Run Data Preparation
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python tourism_project/model_building/data_preparation.py
+      run: |
+        test -f model_building/data_preparation.py || {
+        echo "Missing model_building/data_preparation.py"
+        find . -maxdepth 4 -type f | sort
+        exit 1
+        }
+
+        python model_building/data_preparation.py
 
   model-training:
     needs: data-prep
