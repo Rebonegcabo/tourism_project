@@ -18,9 +18,9 @@ except Exception as e:
     print(f"Could not log in to Hugging Face: {e}")
 
 # Define paths (relative to the repository root when run in GitHub Actions)
-data_path = 'tourism_project/data/tourism.csv'
-encoder_path = 'tourism_project/deployment/encoder.joblib' # Path to the saved encoder from data-prep
-model_output_path = 'tourism_project/deployment/rf_model.joblib'
+data_path = 'data/tourism.csv'
+encoder_path = 'deployment/encoder.joblib' # Path to the saved encoder from data-prep
+model_output_path = 'deployment/rf_model.joblib'
 
 # Ensure deployment directory exists for model and encoder
 os.makedirs(os.path.dirname(model_output_path), exist_ok=True)
@@ -69,8 +69,8 @@ print(f"Random Forest model saved to {model_output_path}")
 
 # --- Push model and encoder to Hugging Face Model Hub ---
 
-HF_MODEL_REPO_ID = "DrGee/tourism-package-model" # Replaced 'Rebonegcabo' with 'DrGee'
-HF_DATASET_REPO_ID = "DrGee/tourism-package-prediction" # Replaced 'Rebonegcabo' with 'DrGee'
+HF_MODEL_REPO_ID = "DrGee/tourism-package-model" # Replace with your HF username and model repo name
+HF_DATASET_REPO_ID = "DrGee/tourism-package-prediction"
 
 api = HfApi()
 
