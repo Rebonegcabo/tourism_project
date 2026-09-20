@@ -54,7 +54,14 @@ jobs:
           print("Uploaded", os.environ["CSV_PATH"])
           EOF
 
-  data-prep:
+  data-prep: 
+  runs-on: ubuntu-latest needs: 
+  needs: register-dataset  
+  steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - name: Upload prepared files
         uses: actions/upload-artifact@v4
         with:
@@ -62,14 +69,6 @@ jobs:
           path: |
             tourism_project/deployment/encoder.joblib
             tourism_project/data/tourism.csv
-             needs: register-dataset
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
- 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
  
       - name: Check required files
         run: |
