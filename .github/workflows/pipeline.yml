@@ -14,20 +14,33 @@ jobs:
       - name: Install Dependencies
         run: pip install -r tourism_project/requirements_workflow.txt
       - name: Upload Dataset to Hugging Face Hub
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          python - <<'EOF'
-          import os
-          from huggingface_hub import HfApi
-          api = HfApi(token=os.environ["HF_TOKEN"])
-          api.create_repo(repo_id="DrGee/tourism-package-prediction",
-                          repo_type="dataset", private=False, exist_ok=True)
-          api.upload_file(path_or_fileobj="tourism_project/data/tourism.csv",
-                          path_in_repo="tourism.csv",
-                          repo_id="DrGee/tourism-package-prediction",
-                          repo_type="dataset")
-          EOF
+       env:
+    HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  run: |
+    test -f data/tourism.csv || {
+      echo "Dataset not found: data/tourism.csv"
+      find . -type f -name "tourism.csv"
+      exit 1
+    }
+
+    python - <<'EOF'
+    import os
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=os.environ["HF_TOKEN"])
+    api.create_repo(
+        repo_id="DrGee/tourism-package-prediction",
+        repo_type="dataset",
+        private=False,
+        exist_ok=True,
+    )
+    api.upload_file(
+        path_or_fileobj="data/tourism.csv",
+        path_in_repo="tourism.csv",
+        repo_id="DrGee/tourism-package-prediction",
+        repo_type="dataset",
+    )
+    EOF
 
   data-prep:
     needs: register-dataset
