@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -19,6 +20,7 @@ jobs:
         run: pip install huggingface_hub
 
       - name: Locate dataset file
+        shell: bash
         run: |
           CSV_PATH=$(find . -type f -name "tourism.csv" -not -path "./.git/*" | head -n 1)
           if [ -z "$CSV_PATH" ]; then
@@ -29,47 +31,56 @@ jobs:
           echo "Using dataset at: $CSV_PATH"
           echo "CSV_PATH=$CSV_PATH" >> "$GITHUB_ENV"
 
+      - name: Upload dataset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tourism-dataset
+          path: ${{ env.CSV_PATH }}
+
       - name: Upload Dataset to Hugging Face Hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python - <<'EOF'
+          python - <<'PY'
           import os
           from huggingface_hub import HfApi
+
+          repo_id = "DrGee/tourism-package-prediction"
+          csv_path = os.environ["CSV_PATH"]
 
           api = HfApi(token=os.environ["HF_TOKEN"])
           print("Authenticated as:", api.whoami()["name"])
           api.create_repo(
-              repo_id="DrGee/tourism-package-prediction",
+              repo_id=repo_id,
               repo_type="dataset",
               private=False,
               exist_ok=True,
           )
           api.upload_file(
-              path_or_fileobj=os.environ["CSV_PATH"],
+              path_or_fileobj=csv_path,
               path_in_repo="tourism.csv",
-              repo_id="DrGee/tourism-package-prediction",
+              repo_id=repo_id,
               repo_type="dataset",
           )
-          print("Uploaded", os.environ["CSV_PATH"])
-          EOF
+          print("Uploaded", csv_path)
+          PY
 
-  data-prep: 
-  runs-on: ubuntu-latest needs: 
-  needs: register-dataset  
-  steps:
+  data-prep:
+    needs: register-dataset
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@v4
+
+      - name: Download dataset artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tourism-dataset
+          path: downloaded-data
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Upload prepared files
-        uses: actions/upload-artifact@v4
-        with:
-          name: prepared-model-files
-          path: |
-            tourism_project/deployment/encoder.joblib
-            tourism_project/data/tourism.csv
- 
+
       - name: Check required files
         run: |
           for f in requirements.txt tourism_project/model_building/prep.py; do
@@ -80,10 +91,18 @@ jobs:
               exit 1
             fi
           done
- 
+
+      - name: Ensure dataset exists where prep expects it
+        shell: bash
+        run: |
+          if [ -f "downloaded-data/tourism.csv" ]; then
+            mkdir -p tourism_project/data
+            cp downloaded-data/tourism.csv tourism_project/data/tourism.csv
+          fi
+
       - name: Install Dependencies
         run: pip install -r requirements.txt
- 
+
       - name: Run Data Preparation
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -94,12 +113,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install Dependencies
         run: pip install -r tourism_project/requirements_workflow.txt
+
       - name: Start MLflow Server
         run: |
           nohup mlflow ui --host 0.0.0.0 --port 5000 &
           sleep 10
+
       - name: Model Building
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -110,14 +132,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install Dependencies
         run: pip install -r tourism_project/deployment/requirements.txt
+
       - name: Download Model and Encoder from Hugging Face Hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='DrGee/tourism-package-model', filename='rf_model.joblib', local_dir='tourism_project/deployment/')"
-          python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='DrGee/tourism-package-prediction', filename='encoder.joblib', repo_type='dataset', local_dir='tourism_project/deployment/')"
+          python - <<'PY'
+          from huggingface_hub import hf_hub_download
+
+          hf_hub_download(
+              repo_id='DrGee/tourism-package-model',
+              filename='rf_model.joblib',
+              local_dir='tourism_project/deployment/'
+          )
+          hf_hub_download(
+              repo_id='DrGee/tourism-package-prediction',
+              filename='encoder.joblib',
+              repo_type='dataset',
+              local_dir='tourism_project/deployment/'
+          )
+          PY
+
       - name: Push files to Frontend Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
