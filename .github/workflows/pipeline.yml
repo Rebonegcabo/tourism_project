@@ -4,32 +4,42 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
-
   register-dataset:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Install Dependencies
-        run: pip install -r tourism_project/requirements_workflow.txt
+        run: pip install huggingface_hub
+
+      - name: Locate dataset file
+        run: |
+          CSV_PATH=$(find . -type f -name "tourism.csv" -not -path "./.git/*" | head -n 1)
+          if [ -z "$CSV_PATH" ]; then
+            echo "tourism.csv not found in the repository. Files present:"
+            find . -type f -not -path "./.git/*" | head -50
+            exit 1
+          fi
+          echo "Using dataset at: $CSV_PATH"
+          echo "CSV_PATH=$CSV_PATH" >> "$GITHUB_ENV"
 
       - name: Upload Dataset to Hugging Face Hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          test -f data/tourism.csv || {
-            echo "Dataset not found: data/tourism.csv"
-            find . -type f -name "tourism.csv"
-            exit 1
-          }
-
           python - <<'EOF'
           import os
           from huggingface_hub import HfApi
 
           api = HfApi(token=os.environ["HF_TOKEN"])
+          print("Authenticated as:", api.whoami()["name"])
           api.create_repo(
               repo_id="DrGee/tourism-package-prediction",
               repo_type="dataset",
@@ -37,11 +47,12 @@ jobs:
               exist_ok=True,
           )
           api.upload_file(
-              path_or_fileobj="data/tourism.csv",
+              path_or_fileobj=os.environ["CSV_PATH"],
               path_in_repo="tourism.csv",
               repo_id="DrGee/tourism-package-prediction",
               repo_type="dataset",
           )
+          print("Uploaded", os.environ["CSV_PATH"])
           EOF
 
   data-prep:
