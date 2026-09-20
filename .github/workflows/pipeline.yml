@@ -56,7 +56,14 @@ jobs:
           EOF
 
   data-prep:
-    needs: register-dataset
+      - name: Upload prepared files
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepared-model-files
+          path: |
+            tourism_project/deployment/encoder.joblib
+            tourism_project/data/tourism.csv
+             needs: register-dataset
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
