@@ -71,13 +71,15 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
-        test -f model_building/data_preparation.py || {
-        echo "Missing model_building/data_preparation.py"
-        find . -maxdepth 4 -type f | sort
-        exit 1
-        }
+          ls -la
+          test -f model_building/data_preparation.py || {
+        echo "Missing script: model_building/data_preparation.py"
+    
+          find . -maxdepth 3 -type f | sort
+          exit 1
+          }
 
-        python model_building/data_preparation.py
+          python model_building/data_preparation.py
 
   model-training:
     needs: data-prep
