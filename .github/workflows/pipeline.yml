@@ -1,0 +1,91 @@
+
+name: Tourism Project Pipeline
+
+on:
+  push:
+    branches:
+      - main  # Automatically triggers on push to the main branch
+
+jobs:
+
+  register-dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Dependencies
+        run: pip install -r tourism_project/requirements_workflow.txt
+      - name: Upload Dataset to Hugging Face Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python -c "from huggingface_hub import HfApi; api = HfApi(); api.create_repo(repo_id='DrGee/tourism-package-prediction', repo_type='dataset', private=False, token=os.environ['HF_TOKEN'])"
+          python -c "from huggingface_hub import HfApi; api = HfApi(); api.upload_file(path_or_fileobj='tourism_project/data/tourism.csv', path_in_repo='tourism.csv', repo_id='DrGee/tourism-package-prediction', repo_type='dataset', token=os.environ['HF_TOKEN'])"
+
+  data-prep:
+    needs: register-dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Dependencies
+        run: pip install -r tourism_project/requirements_workflow.txt
+      - name: Download Dataset from Hugging Face Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='DrGee/tourism-package-prediction', filename='tourism.csv', repo_type='dataset', local_dir='tourism_project/data')"
+      - name: Run Data Preparation
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python tourism_project/model_building/data_preparation.py
+
+
+  model-training:
+    needs: data-prep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Dependencies
+        run: pip install -r tourism_project/requirements_workflow.txt
+      - name: Start MLflow Server
+        run: |
+          nohup mlflow ui --host 0.0.0.0 --port 5000 &  # Run MLflow UI in the background
+          sleep 5  # Wait for a moment to let the server starts
+      - name: Model Building
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python tourism_project/model_building/model_training.py
+
+
+  deploy-hosting:
+    runs-on: ubuntu-latest
+    needs: [model-training,data-prep,register-dataset]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Dependencies
+        run: pip install -r tourism_project/deployment/requirements.txt
+      - name: Download Model from Hugging Face Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='DrGee/tourism-package-model', filename='rf_model.joblib', local_dir='tourism_project/deployment/')"
+          python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='DrGee/tourism-package-prediction', filename='encoder.joblib', local_dir='tourism_project/deployment/')"
+          python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='DrGee/tourism-package-prediction', filename='tourism.csv', repo_type='dataset', local_dir='tourism_project/data')"
+      - name: Push files to Frontend Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git clone https://huggingface.co/spaces/DrGee/tourism-package-space frontend_space
+          cp tourism_project/deployment/app.py frontend_space/
+          cp tourism_project/deployment/rf_model.joblib frontend_space/
+          cp tourism_project/deployment/requirements.txt frontend_space/
+          cp tourism_project/deployment/encoder.joblib frontend_space/
+          cp tourism_project/data/tourism.csv frontend_space/
+          cd frontend_space
+          git add .
+          git commit -m "Update Streamlit app and model"
+          git push
