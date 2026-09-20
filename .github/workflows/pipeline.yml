@@ -60,26 +60,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Dependencies
-        run: pip install -r tourism_project/requirements_workflow.txt
-      - name: Download Dataset from Hugging Face Hub
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+ 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+ 
+      - name: Check required files
         run: |
-          python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='DrGee/tourism-package-prediction', filename='tourism.csv', repo_type='dataset', local_dir='tourism_project/data')"
+          for f in requirements.txt tourism_project/model_building/prep.py; do
+            if [ ! -f "$f" ]; then
+              echo "Missing: $f"
+              echo "Files in the repo:"
+              find . -maxdepth 3 -type f -not -path "./.git/*" | sort
+              exit 1
+            fi
+          done
+ 
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+ 
       - name: Run Data Preparation
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      run: |
-          ls -la
-          test -f model_building/data_preparation.py || {
-        echo "Missing script: model_building/data_preparation.py"
-    
-          find . -maxdepth 3 -type f | sort
-          exit 1
-          }
-
-          python model_building/data_preparation.py
+        run: python tourism_project/model_building/prep.py
 
   model-training:
     needs: data-prep
